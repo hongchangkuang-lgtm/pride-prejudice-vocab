@@ -452,6 +452,138 @@ body {
   .flashcard-wrapper, .flashcard { min-height: 240px; }
   .keyboard-hints { display: none; }
 }
+
+/* Membership / Activation */
+.lock-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(44, 24, 16, 0.85);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.lock-modal {
+  background: var(--card-front);
+  border-radius: 20px;
+  padding: 36px 28px;
+  max-width: 380px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.lock-icon { font-size: 48px; margin-bottom: 12px; }
+.lock-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.lock-desc {
+  font-size: 14px;
+  color: var(--text-light);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.lock-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid rgba(139,69,19,0.15);
+  border-radius: 12px;
+  font-size: 16px;
+  font-family: inherit;
+  text-align: center;
+  letter-spacing: 2px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.lock-input:focus { border-color: var(--accent); }
+.lock-input.error { border-color: var(--red); animation: shake 0.4s ease; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+.lock-btn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.lock-btn-primary {
+  background: linear-gradient(135deg, var(--accent), #6B3410);
+  color: #fff;
+}
+.lock-btn-primary:hover { opacity: 0.9; transform: scale(1.02); }
+.lock-btn-secondary {
+  background: none;
+  color: var(--text-light);
+  margin-top: 8px;
+  font-size: 13px;
+}
+.lock-error-msg {
+  color: var(--red);
+  font-size: 13px;
+  margin-top: 8px;
+  min-height: 18px;
+}
+.lock-success-msg {
+  color: var(--green);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* VIP badge */
+.vip-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #B8860B, #DAA520);
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.free-badge {
+  display: inline-block;
+  background: rgba(74,124,89,0.15);
+  color: var(--green);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+/* Lock icon on level buttons */
+.level-btn .lock-icon-small {
+  font-size: 11px;
+  margin-left: 2px;
+}
+
+/* Contact info */
+.contact-info {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(139,69,19,0.04);
+  border-radius: 8px;
+  line-height: 1.6;
+}
+.contact-info a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 </style>
 </head>
 <body>
@@ -465,6 +597,7 @@ body {
 <div class="mode-tabs" id="modeTabs"></div>
 <div class="stats-bar" id="statsBar"></div>
 <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+<div id="lockOverlay" class="lock-overlay" style="display:none"></div>
 <div id="app"></div>
 
 <script>
@@ -497,6 +630,171 @@ function saveState() {
     }));
   } catch(e) {}
 }
+
+
+// ============================================================
+// MEMBERSHIP / ACTIVATION CODE SYSTEM
+// ============================================================
+
+// Pre-set activation codes (you can change these anytime)
+const VALID_CODES = {
+  'CET6': new Set([
+    'PP6-2024-AUSTEN',
+    'PP6-VIP-ELITE',
+    'PP6-PRIDE-STUDY',
+    'UNLOCK-CET6-PPV',
+    'CET6-DARCY-2024',
+    'PP-PREMIUM-6688',
+    'VOCAB6-JANE-OK'
+  ]),
+  '考研': new Set([
+    'PPKY-2024-AUSTEN',
+    'PPKY-VIP-ELITE',
+    'PPKY-PRIDE-STUDY',
+    'UNLOCK-KAOYAN-PPV',
+    'KY-DARCY-2024',
+    'PP-PREMIUM-8866',
+    'VOCABKY-JANE-OK'
+  ]),
+  'ALL': new Set([
+    'PP-ALL-VIP-2024',
+    'PRIDE-FULL-ACCESS',
+    'AUSTEN-VIP-ALL',
+    'PP-ULTIMATE-2024',
+    'VOCAB-MASTER-ALL'
+  ])
+};
+
+// Load unlocked status
+let unlockedLevels = new Set(['CET4']); // CET4 always free
+try {
+  const savedUnlocked = JSON.parse(localStorage.getItem('pp_unlocked_v1') || '[]');
+  savedUnlocked.forEach(l => unlockedLevels.add(l));
+} catch(e) {}
+
+function saveUnlocked() {
+  try {
+    localStorage.setItem('pp_unlocked_v1', JSON.stringify([...unlockedLevels]));
+  } catch(e) {}
+}
+
+function isLevelUnlocked(lvl) {
+  if (lvl === 'all') {
+    return unlockedLevels.has('CET6') && unlockedLevels.has('考研');
+  }
+  return unlockedLevels.has(lvl);
+}
+
+function isPremiumLevel(lvl) {
+  return lvl === 'CET6' || lvl === '考研';
+}
+
+function tryActivate(code, targetLevel) {
+  const upperCode = code.trim().toUpperCase();
+  
+  // Check ALL codes first
+  if (VALID_CODES['ALL'].has(upperCode)) {
+    unlockedLevels.add('CET6');
+    unlockedLevels.add('考研');
+    saveUnlocked();
+    return { success: true, msg: '全部词汇已解锁！' };
+  }
+  
+  // Check specific level codes
+  if (targetLevel && VALID_CODES[targetLevel] && VALID_CODES[targetLevel].has(upperCode)) {
+    unlockedLevels.add(targetLevel);
+    saveUnlocked();
+    return { success: true, msg: (targetLevel === 'CET6' ? '六级' : '考研') + '词汇已解锁！' };
+  }
+  
+  // Check if code belongs to any level
+  for (const [lvl, codes] of Object.entries(VALID_CODES)) {
+    if (lvl !== 'ALL' && codes.has(upperCode)) {
+      unlockedLevels.add(lvl);
+      saveUnlocked();
+      return { success: true, msg: (lvl === 'CET6' ? '六级' : '考研') + '词汇已解锁！' };
+    }
+  }
+  
+  return { success: false, msg: '激活码无效，请检查后重试' };
+}
+
+function showLockModal(targetLevel) {
+  const overlay = document.getElementById('lockOverlay');
+  const levelName = targetLevel === 'CET6' ? '六级' : targetLevel === '考研' ? '考研' : '六级+考研';
+  
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div class="lock-modal">
+      <div class="lock-icon">&#x1F512;</div>
+      <div class="lock-title">${levelName}词汇需要解锁</div>
+      <div class="lock-desc">
+        四级词汇（667词）永久免费使用<br>
+        输入激活码即可解锁${levelName}词汇
+      </div>
+      <input class="lock-input" id="activateInput" type="text" placeholder="请输入激活码" maxlength="30" autocomplete="off">
+      <div class="lock-error-msg" id="activateMsg"></div>
+      <button class="lock-btn lock-btn-primary" onclick="handleActivate('${targetLevel}')">激活</button>
+      <button class="lock-btn lock-btn-secondary" onclick="closeLockModal()">返回免费内容</button>
+      <div class="contact-info">
+        获取激活码请联系：<br>
+        微信：15073072233
+      </div>
+    </div>
+  `;
+  
+  // Auto focus input
+  setTimeout(() => {
+    const input = document.getElementById('activateInput');
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleActivate(targetLevel);
+      });
+    }
+  }, 100);
+}
+
+function handleActivate(targetLevel) {
+  const input = document.getElementById('activateInput');
+  const msgEl = document.getElementById('activateMsg');
+  const code = input.value;
+  
+  if (!code.trim()) {
+    msgEl.textContent = '请输入激活码';
+    msgEl.className = 'lock-error-msg';
+    input.classList.add('error');
+    setTimeout(() => input.classList.remove('error'), 400);
+    return;
+  }
+  
+  const result = tryActivate(code, targetLevel);
+  if (result.success) {
+    msgEl.textContent = result.msg;
+    msgEl.className = 'lock-success-msg';
+    setTimeout(() => {
+      closeLockModal();
+      render();
+    }, 800);
+  } else {
+    msgEl.textContent = result.msg;
+    msgEl.className = 'lock-error-msg';
+    input.classList.add('error');
+    setTimeout(() => input.classList.remove('error'), 400);
+  }
+}
+
+function closeLockModal() {
+  document.getElementById('lockOverlay').style.display = 'none';
+  // Reset to CET4 if current level is locked
+  if (!isLevelUnlocked(level)) {
+    level = 'CET4';
+  }
+  render();
+}
+
+// Override level selection to check unlock status
+const _originalLevel = level;
 
 function getLevelData() {
   if (level === 'all') return VOCAB_DATA;
@@ -570,11 +868,15 @@ function render() {
   const cet6Count = VOCAB_DATA.filter(d => d.l === 'CET6').length;
   const kaoyanCount = VOCAB_DATA.filter(d => d.l === '考研').length;
   
+  const allUnlocked = unlockedLevels.has('CET6') && unlockedLevels.has('考研');
+  const cet6Unlocked = unlockedLevels.has('CET6');
+  const kyUnlocked = unlockedLevels.has('考研');
+  
   document.getElementById('levelSelector').innerHTML = `
-    <button class="level-btn ${level==='all'?'active':''}" data-level="all" onclick="level='all';currentIndex=0;flipped=false;quizAnswer=null;render()">全部 ${VOCAB_DATA.length}</button>
-    <button class="level-btn ${level==='CET4'?'active':''}" data-level="CET4" onclick="level='CET4';currentIndex=0;flipped=false;quizAnswer=null;render()">四级 ${cet4Count}</button>
-    <button class="level-btn ${level==='CET6'?'active':''}" data-level="CET6" onclick="level='CET6';currentIndex=0;flipped=false;quizAnswer=null;render()">六级 ${cet6Count}</button>
-    <button class="level-btn ${level==='考研'?'active':''}" data-level="考研" onclick="level='考研';currentIndex=0;flipped=false;quizAnswer=null;render()">考研 ${kaoyanCount}</button>
+    <button class="level-btn ${level==='all'?'active':''}" data-level="all" onclick="${allUnlocked ? "level='all';currentIndex=0;flipped=false;quizAnswer=null;render()" : "showLockModal('ALL')"}">全部 ${VOCAB_DATA.length} ${!allUnlocked ? '<span class=\'lock-icon-small\'>&#x1F512;</span>' : ''}</button>
+    <button class="level-btn ${level==='CET4'?'active':''}" data-level="CET4" onclick="level='CET4';currentIndex=0;flipped=false;quizAnswer=null;render()">四级 ${cet4Count} <span class='free-badge'>免费</span></button>
+    <button class="level-btn ${level==='CET6'?'active':''}" data-level="CET6" onclick="${cet6Unlocked ? "level='CET6';currentIndex=0;flipped=false;quizAnswer=null;render()" : "showLockModal('CET6')"}">六级 ${cet6Count} ${cet6Unlocked ? '<span class=\'vip-badge\'>VIP</span>' : '<span class=\'lock-icon-small\'>&#x1F512;</span>'}</button>
+    <button class="level-btn ${level==='考研'?'active':''}" data-level="考研" onclick="${kyUnlocked ? "level='考研';currentIndex=0;flipped=false;quizAnswer=null;render()" : "showLockModal('考研')"}">考研 ${kaoyanCount} ${kyUnlocked ? '<span class=\'vip-badge\'>VIP</span>' : '<span class=\'lock-icon-small\'>&#x1F512;</span>'}</button>
   `;
 
   // Mode tabs
